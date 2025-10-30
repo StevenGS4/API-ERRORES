@@ -1,0 +1,26 @@
+.detail-container {
+  padding: 2rem;
+}
+
+.buttons {
+  margin-top: 1rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.ignore, .resolve {
+  border: none;
+  padding: 0.7rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.ignore {
+  background-color: #e0e0e0;
+}
+
+.resolve {
+  background-color: #007bff;
+  color: white;
+}
