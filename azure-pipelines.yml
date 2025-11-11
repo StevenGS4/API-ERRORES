@@ -1,0 +1,127 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  nodeVersion: '20.x'
+  backendWorkingDirectory: 'BACKEND'
+  frontendWorkingDirectory: 'FRONTEND'
+  backendArtifactName: 'backend-drop'
+  frontendArtifactName: 'frontend-drop'
+  backendPackage: '$(Build.ArtifactStagingDirectory)/backend.zip'
+  frontendBuildDirectory: '$(System.DefaultWorkingDirectory)/FRONTEND/build'
+
+stages:
+  - stage: Build_Backend
+    displayName: Build backend API
+    jobs:
+      - job: Build_Backend
+        displayName: Restore and package backend
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+          - task: Npm@1
+            displayName: 'Install backend dependencies'
+            inputs:
+              command: 'ci'
+              workingDir: '$(backendWorkingDirectory)'
+          - task: ArchiveFiles@2
+            displayName: 'Archive backend service'
+            inputs:
+              rootFolderOrFile: '$(backendWorkingDirectory)'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(backendPackage)'
+              replaceExistingArchive: true
+          - publish: '$(backendPackage)'
+            artifact: '$(backendArtifactName)'
+
+  - stage: Build_Frontend
+    displayName: Build frontend application
+    dependsOn: Build_Backend
+    jobs:
+      - job: Build_Frontend
+        displayName: Build React app
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+          - task: Npm@1
+            displayName: 'Install frontend dependencies'
+            inputs:
+              command: 'ci'
+              workingDir: '$(frontendWorkingDirectory)'
+          - script: |
+              npm run build
+            displayName: 'Build production bundle'
+            workingDirectory: '$(frontendWorkingDirectory)'
+          - publish: '$(frontendBuildDirectory)'
+            artifact: '$(frontendArtifactName)'
+
+  - stage: Deploy
+    displayName: Deploy to Azure
+    dependsOn:
+      - Build_Backend
+      - Build_Frontend
+    jobs:
+      - deployment: Deploy_Backend
+        displayName: Deploy backend to Azure Web App
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: '$(backendArtifactName)'
+                - task: AzureCLI@2
+                  displayName: 'Actualizar configuraciones del backend'
+                  inputs:
+                    azureSubscription: '$(AzureServiceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      az webapp config appsettings set \
+                        --name "$(BackendWebAppName)" \
+                        --resource-group "$(BackendResourceGroup)" \
+                        --settings MONGO_CONNECTION_STRING="$(MONGO_CONNECTION_STRING)"
+                - task: AzureWebApp@1
+                  displayName: 'Deploy backend package'
+                  inputs:
+                    azureSubscription: '$(AzureServiceConnection)'
+                    appType: 'webAppLinux'
+                    appName: '$(BackendWebAppName)'
+                    package: '$(Pipeline.Workspace)/$(backendArtifactName)/backend.zip'
+                    runtimeStack: 'NODE|20-lts'
+      - deployment: Deploy_Frontend
+        displayName: Deploy frontend to Azure Static Web Apps
+        dependsOn: Deploy_Backend
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: '$(frontendArtifactName)'
+                - task: AzureCLI@2
+                  displayName: 'Upload static site content'
+                  inputs:
+                    azureSubscription: '$(AzureServiceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      az staticwebapp upload \
+                        --name "$(FrontendStaticWebAppName)" \
+                        --resource-group "$(FrontendResourceGroup)" \
+                        --source "$(Pipeline.Workspace)/$(frontendArtifactName)"
+                  env:
+                    AZURE_STATIC_WEB_APPS_API_TOKEN: '$(StaticWebAppDeploymentToken)'

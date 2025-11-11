@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "namePrefix": {
+      "value": "api-errores"
+    },
+    "environment": {
+      "value": "dev"
+    },
+    "appServicePlanSkuName": {
+      "value": "P1v2"
+    },
+    "appServicePlanSkuTier": {
+      "value": "PremiumV2"
+    },
+    "appServicePlanCapacity": {
+      "value": 1
+    },
+    "allowedIpRange": {
+      "value": ""
+    },
+    "cosmosDatabaseName": {
+      "value": "errors"
+    }
+  }
+}
